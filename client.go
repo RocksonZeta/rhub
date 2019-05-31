@@ -88,7 +88,7 @@ func (c *Client) ReadPump() {
 		}
 		message = bytes.TrimSpace(bytes.Replace(message, newline, space, -1))
 		// c.hub.broadcast <- message
-		msg, err := c.NewClientHubMessage(message)
+		msg, err := c.NewClientMessage(message)
 		if err != nil {
 			// c.hub.message <- msg
 			fmt.Println("Client.ReadPump", err)
@@ -143,18 +143,18 @@ func (c *Client) WritePump() {
 		}
 	}
 }
-func (c *Client) NewClientHubMessage(data []byte) (*ClientHubMessage, error) {
+func (c *Client) NewClientMessage(data []byte) (*ClientMessage, error) {
 	msg, err := c.DecodeMessage(data)
 	if err != nil {
 		return nil, err
 	}
-	return &ClientHubMessage{
-		Client:       c,
-		HubMessageIn: msg,
+	return &ClientMessage{
+		Client:    c,
+		MessageIn: msg,
 	}, nil
 }
-func (c *Client) DecodeMessage(data []byte) (*HubMessageIn, error) {
-	msg := new(HubMessageIn)
+func (c *Client) DecodeMessage(data []byte) (*MessageIn, error) {
+	msg := new(MessageIn)
 	err := json.Unmarshal(data, msg)
 	if nil != err {
 		fmt.Println("DecodeMessage failed.", err)
@@ -170,10 +170,10 @@ func (c *Client) EncodeMessage(msg interface{}) []byte {
 }
 
 func (c *Client) Encode(subject string, msg interface{}) []byte {
-	return c.EncodeMessage(&HubMessageOut{Subject: subject, Data: msg})
+	return c.EncodeMessage(&MessageOut{Subject: subject, Data: msg})
 }
 func Encode(subject string, msg interface{}) ([]byte, error) {
-	msg = HubMessageOut{Subject: subject, Data: msg}
+	msg = MessageOut{Subject: subject, Data: msg}
 	bs, err := json.Marshal(msg)
 	if err != nil {
 		return nil, err

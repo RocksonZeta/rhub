@@ -20,8 +20,8 @@ type Hub struct {
 	redisConPub  redis.Conn
 	redisChannel string
 	// Inbound messages from the clients.
-	message      chan *ClientHubMessage
-	redisMessage chan *RedisHubMessage
+	message      chan *ClientMessage
+	redisMessage chan *MessageIn
 	// Register requests from the clients.
 	register chan IClient
 	// Unregister requests from clients.
@@ -40,7 +40,7 @@ type Hub struct {
 	afterJoin       func(client IClient)
 	beforeLeave     func(client IClient)
 	afterLeave      func(client IClient)
-	beforeWsMsg     func(msg *ClientHubMessage) bool
+	beforeWsMsg     func(msg *ClientMessage) bool
 	seconds         int
 	closed          bool
 	redisResetCount int
@@ -51,8 +51,8 @@ func NewHub(id interface{}, redisConStr, redisChannel string) IHub {
 		clients:      make(map[IClient]bool),
 		redisConStr:  redisConStr,
 		redisChannel: redisChannel,
-		message:      make(chan *ClientHubMessage),
-		redisMessage: make(chan *RedisHubMessage),
+		message:      make(chan *ClientMessage),
+		redisMessage: make(chan *MessageIn),
 		register:     make(chan IClient),
 		unregister:   make(chan IClient),
 		closeChan:    make(chan struct{}),
@@ -149,7 +149,7 @@ func (h *Hub) initRedisMessageChannel() {
 			if h.redisResetCount > 0 {
 				h.redisResetCount = 0
 			}
-			var msg RedisHubMessage
+			var msg MessageIn
 			json.Unmarshal(v.Data, &msg)
 			h.redisMessage <- &msg
 		case redis.Subscription:
@@ -176,25 +176,25 @@ func (h *Hub) initRedisMessageChannel() {
 func (h *Hub) OnTick(cb func(int)) {
 	h.ticker = cb
 }
-func (h *Hub) onRedisMessage(msg *RedisHubMessage) {
+func (h *Hub) onRedisMessage(msg *MessageIn) {
 	if handler, ok := h.handlers[msg.Subject]; ok {
 		// h.Filter(handler, msg)
 		handler(msg)
 	}
 }
-func (h *Hub) onWsMessage(msg *ClientHubMessage) {
+func (h *Hub) onWsMessage(msg *ClientMessage) {
 	if handler, ok := h.handlerWs[msg.Subject]; ok {
 		handler(msg)
 	} else {
-		h.SendRedisRaw(msg.HubMessageIn, msg.Client.GetProps())
+		h.SendRedisRaw(msg.MessageIn)
 	}
 
 }
-func (h *Hub) SendRedisRaw(msg *HubMessageIn, props map[string]interface{}) {
-	var rmsg RedisHubMessage
-	rmsg.HubMessageIn = msg
-	rmsg.Props = props
-	bs, err := json.Marshal(rmsg)
+func (h *Hub) SendRedisRaw(msg *MessageIn) {
+	// var rmsg MessageIn
+	// rmsg.MessageIn = msg
+	// rmsg.Props = props
+	bs, err := json.Marshal(msg)
 	if err != nil {
 		panic(err)
 	}
@@ -208,16 +208,16 @@ func (h *Hub) SendRedisRaw(msg *HubMessageIn, props map[string]interface{}) {
 	// }
 	// return err
 }
-func (h *Hub) SendRedis(subject string, data interface{}, props map[string]interface{}) {
+func (h *Hub) SendRedis(subject string, data interface{}) {
 	dataBs, _ := json.Marshal(data)
 	dataBsRaw := json.RawMessage(dataBs)
-	h.SendRedisRaw(&HubMessageIn{Subject: subject, Data: &dataBsRaw}, props)
+	h.SendRedisRaw(&MessageIn{Subject: subject, Data: &dataBsRaw})
 }
 func (h *Hub) GetSeconds() int {
 	return h.seconds
 }
 
-// func (h *Hub) Filter(handler Handler, msg *RedisHubMessage) {
+// func (h *Hub) Filter(handler Handler, msg *MessageIn) {
 // 	if len(h.filters) <= 0 {
 // 		handler(msg)
 // 		return
@@ -250,7 +250,7 @@ func (h *Hub) AfterLeave(callback func(client IClient)) {
 func (h *Hub) BeforeLeave(callback func(client IClient)) {
 	h.beforeLeave = callback
 }
-func (h *Hub) BeforeWsMsg(callback func(msg *ClientHubMessage) bool) {
+func (h *Hub) BeforeWsMsg(callback func(msg *ClientMessage) bool) {
 	h.beforeWsMsg = callback
 }
 
@@ -258,7 +258,7 @@ func (h *Hub) BeforeWsMsg(callback func(msg *ClientHubMessage) bool) {
 // 	h.filters = append(h.filters, filter)
 // }
 
-// func (h *Hub) Emit(msg *ClientHubMessage) {
+// func (h *Hub) Emit(msg *ClientMessage) {
 // 	h.message <- msg
 // }
 
@@ -338,7 +338,7 @@ func (h *Hub) SendWs(subject string, message interface{}, receivers []IClient) {
 		h.SendWsBytes(client, bs)
 	}
 }
-func (h *Hub) EchoWs(msg *ClientHubMessage) {
+func (h *Hub) EchoWs(msg *ClientMessage) {
 	h.SendWsAll(msg.Subject, msg.Data)
 }
 
@@ -356,7 +356,7 @@ func (h *Hub) UnregisterChan() chan IClient {
 }
 
 // RegisterChan() chan *Client
-func (h *Hub) MessageChan() chan *ClientHubMessage {
+func (h *Hub) MessageChan() chan *ClientMessage {
 	return h.message
 }
 func (h *Hub) Clients() map[IClient]bool {

@@ -4,9 +4,9 @@ import (
 	"encoding/json"
 )
 
-type Handler func(msg *RedisHubMessage)
-type Filter func(msg *RedisHubMessage, next func())
-type HandlerWs func(message *ClientHubMessage)
+type Handler func(msg *MessageIn)
+type Filter func(msg *MessageIn, next func())
+type HandlerWs func(message *ClientMessage)
 
 //IHub like chat room
 type IHub interface {
@@ -18,7 +18,7 @@ type IHub interface {
 	//On client leave
 	BeforeLeave(callback func(client IClient))
 	AfterLeave(callback func(client IClient))
-	BeforeWsMsg(callback func(msg *ClientHubMessage) bool)
+	BeforeWsMsg(callback func(msg *ClientMessage) bool)
 	//Add filter
 	// Use(filter Filter)
 	// Attach an event handler function
@@ -26,23 +26,23 @@ type IHub interface {
 	OnWs(subject string, handler HandlerWs)
 	// OnLocal(subject string, handler HandlerLocal)
 	//simulate client send msg
-	// Emit(msg *ClientHubMessage)
+	// Emit(msg *ClientMessage)
 	//Dettach an event handler function
 	Off(subject string, handler Handler)
 	OffWs(subject string, handler HandlerWs)
-	SendRedisRaw(msg *HubMessageIn, props map[string]interface{})
-	SendRedis(subject string, data interface{}, props map[string]interface{})
+	SendRedisRaw(msg *MessageIn)
+	SendRedis(subject string, data interface{})
 	//Send message to all clients
 	SendWsAll(subject string, message interface{})
 	SendWs(subject string, message interface{}, receivers []IClient)
-	EchoWs(msg *ClientHubMessage)
+	EchoWs(msg *ClientMessage)
 	Close()
 	// CloseMessageLoop()
 	// SetSelf(self IHub)
 	Run()
 	UnregisterChan() chan IClient
 	RegisterChan() chan IClient
-	MessageChan() chan *ClientHubMessage
+	MessageChan() chan *ClientMessage
 	// MessageLocalChan() chan<- MessageLocal
 	CloseChan() chan struct{}
 	Clients() map[IClient]bool
@@ -63,7 +63,7 @@ type IClient interface {
 	GetProps() map[string]interface{}
 	// Get(key interface{}) interface{}
 	// Set(key, value interface{})
-	NewClientHubMessage(data []byte) (*ClientHubMessage, error)
+	NewClientMessage(data []byte) (*ClientMessage, error)
 	GetClient() *Client
 }
 
@@ -86,37 +86,36 @@ type MessageLocal struct {
 }
 
 //send Message should have this format
-type HubMessageOut struct {
+type MessageOut struct {
 	Subject string
 	Data    interface{}
 }
-type HubMessageIn struct {
+type MessageIn struct {
 	Subject string
 	Data    *json.RawMessage
 }
 
-type RedisHubMessage struct {
-	*HubMessageIn
-	Props map[string]interface{}
-}
-type ClientHubMessage struct {
-	*HubMessageIn
+// type RedisHubMessage struct {
+// 	*MessageIn
+// }
+type ClientMessage struct {
+	*MessageIn
 	Client IClient
 }
 
-func NewHubMessageIn(subject string, data interface{}) *HubMessageIn {
+func NewMessageIn(subject string, data interface{}) *MessageIn {
 	j, _ := json.Marshal(data)
 	r := json.RawMessage(j)
-	return &HubMessageIn{Subject: subject, Data: &r}
+	return &MessageIn{Subject: subject, Data: &r}
 }
 
-func NewClientHubMessage(subject string, data interface{}, client IClient) *ClientHubMessage {
-	r := &ClientHubMessage{Client: client}
-	r.HubMessageIn = &HubMessageIn{Subject: subject}
-	r.HubMessageIn.SetData(data)
+func NewMessage(subject string, data interface{}, client IClient) *ClientMessage {
+	r := &ClientMessage{Client: client}
+	r.MessageIn = &MessageIn{Subject: subject}
+	r.MessageIn.SetData(data)
 	return r
 }
-func (m *HubMessageIn) SetData(data interface{}) error {
+func (m *MessageIn) SetData(data interface{}) error {
 	bs, err := json.Marshal(data)
 	if err != nil {
 		return err
@@ -125,7 +124,7 @@ func (m *HubMessageIn) SetData(data interface{}) error {
 	m.Data = &r
 	return nil
 }
-func (m *HubMessageIn) Decode(obj interface{}) error {
+func (m *MessageIn) Decode(obj interface{}) error {
 	if nil != m.Data {
 		bs, err := m.Data.MarshalJSON()
 		err = json.Unmarshal(bs, &obj)
@@ -134,6 +133,6 @@ func (m *HubMessageIn) Decode(obj interface{}) error {
 	return nil
 }
 
-func (m HubMessageOut) Encode() ([]byte, error) {
+func (m MessageOut) Encode() ([]byte, error) {
 	return json.Marshal(m)
 }

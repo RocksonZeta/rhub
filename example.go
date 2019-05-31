@@ -47,22 +47,22 @@ type User struct {
 func startServer() {
 	hub := NewHub(1, conf.Redis, "test-room-1")
 	hub.AfterJoin(func(c IClient) {
-		hub.SendRedis("join", nil, c.GetClient().GetProps())
+		hub.SendRedis("join", nil)
 	})
 	hub.AfterLeave(func(c IClient) {
-		hub.SendRedis("leave", nil, c.GetClient().GetProps())
+		hub.SendRedis("leave", nil)
 	})
-	hub.On("join", func(m *RedisHubMessage) {
+	hub.On("join", func(m *MessageIn) {
 		fmt.Println("join", *m)
 	})
-	hub.On("leave", func(m *RedisHubMessage) {
+	hub.On("leave", func(m *MessageIn) {
 		fmt.Println("leave", *m)
 	})
-	hub.OnWs("im", func(m *ClientHubMessage) {
+	hub.OnWs("im", func(m *ClientMessage) {
 		fmt.Println("ws receive im:", string(*m.Data))
-		hub.SendRedisRaw(m.HubMessageIn, m.Client.GetProps())
+		hub.SendRedisRaw(m.MessageIn)
 	})
-	hub.On("im", func(m *RedisHubMessage) {
+	hub.On("im", func(m *MessageIn) {
 		var str string
 		fmt.Println("redis receive im ", string(*m.Data))
 		err := m.Decode(&str)
