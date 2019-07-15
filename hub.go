@@ -124,6 +124,7 @@ func (h *Hub) ResetRedis() error {
 		h.redisConPub.Close()
 	}
 	if nil != h.redisConSub {
+		h.psc.Unsubscribe(h.redisChannel)
 		h.redisConSub.Close()
 	}
 	var err error
@@ -155,20 +156,24 @@ func (h *Hub) initRedisMessageChannel() {
 		case redis.Subscription:
 			// fmt.Printf("%s: %s %d\n", v.Channel, v.Kind, v.Count)
 		case error:
-			if !h.closed {
-				sleepTime := time.Duration(h.redisResetCount) * time.Second
-				if sleepTime > 3*time.Second {
-					sleepTime = 3 * time.Second
-				}
-				if h.redisResetCount > 100 {
-					return
-				}
-				time.Sleep(sleepTime)
-				h.ResetRedis()
-				h.redisResetCount++
+			if h.closed {
+				return
 			}
-			fmt.Println("Hub.onRedisMessage error,", v)
+			// if !h.closed {
+			fmt.Println("Hub.onRedisMessage error, reset now.", v)
+			sleepTime := time.Duration(h.redisResetCount) * time.Second
+			if sleepTime > 3*time.Second {
+				sleepTime = 3 * time.Second
+			}
+			if h.redisResetCount > 100 {
+				return
+			}
+			time.Sleep(sleepTime)
+			h.ResetRedis()
+			h.redisResetCount++
 			return
+			// }
+			// return
 		}
 	}
 }
@@ -200,7 +205,9 @@ func (h *Hub) SendRedisRaw(msg *MessageIn) {
 	}
 	_, err = h.redisConPub.Do("PUBLISH", h.redisChannel, string(bs))
 	if err != nil {
-		panic(err)
+		// panic(err)
+		fmt.Println(err)
+		h.ResetRedis()
 	}
 	// h.redisCon.Flush()
 	// if nil != err {
@@ -278,25 +285,33 @@ func (h *Hub) OffWs(subject string, handler HandlerWs) {
 }
 func (h *Hub) Close() {
 	// h.hubs.RemoveHub(h.Id())
-	for client, _ := range h.clients {
-		// client.Close()
-		select {
-		case h.unregister <- client:
-		default:
-			close(client.SendChan())
-			delete(h.clients, client)
-		}
-	}
-	h.closeChan <- struct{}{}
-	close(h.register)
-	close(h.unregister)
-	close(h.message)
-	close(h.redisMessage)
-	close(h.closeChan)
-	h.tick.Stop()
-	h.redisConPub.Close()
-	h.redisConSub.Close()
 	h.closed = true
+	go func() {
+		defer func() {
+			if err := recover(); err != nil {
+				fmt.Println(err)
+			}
+		}()
+		h.redisConPub.Close()
+		h.redisConSub.Close()
+		h.tick.Stop()
+		for client, _ := range h.clients {
+			// client.Close()
+			select {
+			case h.unregister <- client:
+			default:
+				close(client.SendChan())
+				delete(h.clients, client)
+			}
+		}
+		h.closeChan <- struct{}{}
+		close(h.closeChan)
+		close(h.register)
+		close(h.unregister)
+		close(h.message)
+		close(h.redisMessage)
+
+	}()
 }
 func (h *Hub) Id() interface{} {
 	return h.id
@@ -311,7 +326,7 @@ func (h *Hub) ClientList() []IClient {
 	return r
 }
 func (h *Hub) SendWsAll(subject string, message interface{}) {
-	h.SendWs(subject, message, h.ClientList())
+	h.SendWs(subject, message, h.ClientList()...)
 }
 func (h *Hub) SendWsClient(client IClient, subject string, message interface{}) {
 	bs, err := Encode(subject, message)
@@ -329,12 +344,15 @@ func (h *Hub) SendWsBytes(client IClient, bs []byte) {
 	}
 }
 
-func (h *Hub) SendWs(subject string, message interface{}, receivers []IClient) {
+func (h *Hub) SendWs(subject string, message interface{}, receivers ...IClient) {
 	bs, err := Encode(subject, message)
 	if err != nil {
 		fmt.Println(err)
 	}
 	for _, client := range receivers {
+		if client == nil {
+			continue
+		}
 		h.SendWsBytes(client, bs)
 	}
 }

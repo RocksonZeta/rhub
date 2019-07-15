@@ -34,7 +34,7 @@ type IHub interface {
 	SendRedis(subject string, data interface{})
 	//Send message to all clients
 	SendWsAll(subject string, message interface{})
-	SendWs(subject string, message interface{}, receivers []IClient)
+	SendWs(subject string, message interface{}, receivers ...IClient)
 	EchoWs(msg *ClientMessage)
 	Close()
 	// CloseMessageLoop()

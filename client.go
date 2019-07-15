@@ -199,13 +199,11 @@ func (c *Client) Hub() IHub {
 	return c.hub
 }
 
-var upgrader = websocket.Upgrader{
-	ReadBufferSize:  1024,
-	WriteBufferSize: 1024,
-}
-
 func DefaultUpgrader() websocket.Upgrader {
-	return upgrader
+	return websocket.Upgrader{
+		ReadBufferSize:  1024,
+		WriteBufferSize: 1024,
+	}
 }
 
 func DefaultWsConfig() WsConfig {
